@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Arun LMS</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--card:#f4f4f6;--ac:#2563eb;--bd:#ddd}
+@media(prefers-color-scheme:dark){:root{--bg:#111;--fg:#eee;--mut:#999;--card:#1c1c1f;--ac:#60a5fa;--bd:#333}}
+*{box-sizing:border-box}body{font:16px system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid var(--bd)}
+header a{color:var(--fg);text-decoration:none;font-weight:600}main{max-width:760px;margin:0 auto;padding:20px}
+a{color:var(--ac)}.card{background:var(--card);border-radius:10px;padding:14px 16px;margin:10px 0}.mut{color:var(--mut);font-size:14px}
+input,textarea,select{width:100%;padding:9px;margin:5px 0;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}select{width:auto}
+button{background:var(--ac);color:#fff;border:0;border-radius:6px;padding:8px 14px;font:inherit;cursor:pointer}button.alt{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+.bar{height:6px;background:var(--bd);border-radius:3px;margin-top:8px}.bar i{display:block;height:100%;background:var(--ac);border-radius:3px}
+.err{color:#d33}pre{white-space:pre-wrap;font:inherit}
+</style></head><body>
+<header><a href="#/">Arun LMS</a><span id="nav"></span></header><main id="app"></main>
+<script>
+const app=document.getElementById('app');let token=null,me=null;
+try{token=localStorage.getItem('t');me=JSON.parse(localStorage.getItem('u')||'null')}catch(e){}
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(p,m='GET',b){const r=await fetch('/api'+p,{method:m,headers:{'content-type':'application/json',...(token?{authorization:'Bearer '+token}:{})},body:b?JSON.stringify(b):undefined});const d=await r.json().catch(()=>({}));if(r.status===401&&token){logout()}if(!r.ok)throw new Error(d.error||'Something went wrong');return d}
+function save(d){token=d.token;me=d.user;try{localStorage.setItem('t',token);localStorage.setItem('u',JSON.stringify(me))}catch(e){}route()}
+function logout(){token=me=null;try{localStorage.clear()}catch(e){}route()}
+const val=id=>document.getElementById(id).value;
+const fail=e=>{document.getElementById('err').textContent=e.message};
+function nav(){document.getElementById('nav').innerHTML=me?`${esc(me.name)} <span class="mut">(${me.role})</span> <button class="alt" onclick="logout()">Log out</button>`:''}
+function authView(){app.innerHTML=`<h2>Welcome</h2><div class="card"><input id="n" placeholder="Name (sign up only)"><input id="e" type="email" placeholder="Email"><input id="p" type="password" placeholder="Password (8+ chars)"><p class="err" id="err"></p><button onclick="auth('login')">Log in</button> <button class="alt" onclick="auth('signup')">Sign up</button><p class="mut">The first account created becomes the admin.</p></div>`}
+async function auth(k){try{save(await api('/'+k,'POST',{name:val('n'),email:val('e'),password:val('p')}))}catch(e){fail(e)}}
+async function home(){const cs=await api('/courses');app.innerHTML=`<h2>Courses</h2>`+(me.role!=='student'?`<div class="card"><b>New course</b><input id="t" placeholder="Title"><textarea id="d" placeholder="Description"></textarea><p class="err" id="err"></p><button onclick="newCourse()">Create</button></div>`:'')+(cs.map(c=>`<div class="card"><a href="#/c/${c.id}"><b>${esc(c.title)}</b></a><div class="mut">by ${esc(c.instructor)} · ${c.lessons} lessons${c.enrolled?' · enrolled':''}</div><p>${esc(c.description)}</p>${c.enrolled&&c.lessons?`<div class="bar"><i style="width:${Math.round(100*c.done/c.lessons)}%"></i></div>`:''}</div>`).join('')||'<p class="mut">No courses yet.</p>')+(me.role==='admin'?`<p><a href="#/admin">Manage users</a></p>`:'')}
+async function newCourse(){try{const r=await api('/courses','POST',{title:val('t'),description:val('d')});location.hash='#/c/'+r.id}catch(e){fail(e)}}
+async function course(id){const c=await api('/courses/'+id);const n=c.lessons.length,d=c.lessons.filter(l=>l.done).length;
+app.innerHTML=`<p><a href="#/">← Courses</a></p><h2>${esc(c.title)}</h2><p class="mut">by ${esc(c.instructor)}</p><p>${esc(c.description)}</p>`+(!c.enrolled&&!c.owner?`<button onclick="enroll(${id})">Enroll</button>`:`<div class="bar"><i style="width:${n?Math.round(100*d/n):0}%"></i></div><p class="mut">${d}/${n} complete${n&&d===n?' 🎉 Course finished':''}</p>`)+
+c.lessons.map(l=>`<div class="card"><b>${esc(l.title)}</b>${l.locked?' <span class="mut">(enroll to view)</span>':`${/^https:\/\//.test(l.video_url)?`<p><a href="${esc(l.video_url)}" target="_blank" rel="noopener">▶ Watch video</a></p>`:''}<pre>${esc(l.content)}</pre>${c.enrolled?(l.done?'<span class="mut">✓ Completed</span>':`<button onclick="done(${l.id},${id})">Mark complete</button>`):''}`}</div>`).join('')+
+(c.owner?`<div class="card"><b>Add lesson</b><input id="lt" placeholder="Title"><textarea id="lc" rows="4" placeholder="Content"></textarea><input id="lv" placeholder="Video URL (optional, https://)"><p class="err" id="err"></p><button onclick="addLesson(${id})">Add</button></div>`:'')}
+async function enroll(id){await api('/courses/'+id+'/enroll','POST');route()}
+async function done(l,id){await api('/lessons/'+l+'/complete','POST');course(id)}
+async function addLesson(id){try{await api('/courses/'+id+'/lessons','POST',{title:val('lt'),content:val('lc'),video_url:val('lv')});course(id)}catch(e){fail(e)}}
+async function admin(){const us=await api('/users');app.innerHTML=`<p><a href="#/">← Courses</a></p><h2>Users</h2>`+us.map(u=>`<div class="card">${esc(u.name)} <span class="mut">${esc(u.email)}</span> <select onchange="role(${u.id},this.value)">${['student','instructor','admin'].map(r=>`<option${r===u.role?' selected':''}>${r}</option>`).join('')}</select></div>`).join('')}
+async function role(id,r){await api('/users/'+id+'/role','PATCH',{role:r})}
+async function route(){nav();if(!token){authView();return}const h=location.hash;try{if(h.startsWith('#/c/'))await course(+h.slice(4));else if(h==='#/admin')await admin();else await home()}catch(e){app.innerHTML=`<p class="err">${esc(e.message)}</p>`}}
+addEventListener('hashchange',route);route();
+</script></body></html>
