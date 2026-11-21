@@ -7,6 +7,26 @@ const enc = new TextEncoder()
 const hex = (b: ArrayBuffer | Uint8Array) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('')
 const rand = (n: number) => hex(crypto.getRandomValues(new Uint8Array(n)))
 
+const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, salt TEXT NOT NULL, hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'student', created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE TABLE IF NOT EXISTS courses (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT DEFAULT '', instructor_id INTEGER NOT NULL REFERENCES users(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
+  `CREATE TABLE IF NOT EXISTS lessons (id INTEGER PRIMARY KEY AUTOINCREMENT, course_id INTEGER NOT NULL REFERENCES courses(id), position INTEGER NOT NULL DEFAULT 0, title TEXT NOT NULL, content TEXT DEFAULT '', video_url TEXT DEFAULT '')`,
+  `CREATE TABLE IF NOT EXISTS enrollments (user_id INTEGER NOT NULL, course_id INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, course_id))`,
+  `CREATE TABLE IF NOT EXISTS progress (user_id INTEGER NOT NULL, lesson_id INTEGER NOT NULL, PRIMARY KEY (user_id, lesson_id))`,
+  `CREATE INDEX IF NOT EXISTS idx_lessons_course ON lessons(course_id)`,
+]
+let ready = false
+
+// Creates tables on first request, so no manual migration step is needed
+app.use('/api/*', async (c, next) => {
+  if (!ready) {
+    await c.env.DB.batch(SCHEMA.map((q) => c.env.DB.prepare(q)))
+    ready = true
+  }
+  await next()
+})
+
 async function hashPw(pw: string, salt: string) {
   const key = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits'])
   return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: enc.encode(salt), iterations: 100000, hash: 'SHA-256' }, key, 256))
