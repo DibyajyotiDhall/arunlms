@@ -1,4 +1,4 @@
-# Arun LMS (Cloudflare Workers + D1)
+# Arun LMS (Cloudflare Workers, test mode)
 
-Deploy command: `npx wrangler deploy`. The D1 database is created automatically on first deploy and
-the tables are created on the first request. The first account that signs up becomes admin.
+In-memory data (no database); it resets when the Worker restarts. Deploy command: `npx wrangler deploy`.
+The first account that signs up becomes admin.
